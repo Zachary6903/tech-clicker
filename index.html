@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" sizes="192x192" href="icons/icon-192.png" />
+<link rel="icon" sizes="512x512" href="icons/icon-512.png" />
+<title>Tech Clicker</title>
+<style>
+/* ——— styles exactly as before ——— */
+:root{--bg:#0f172a;--panel:#0b1220;--ink:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--accent:#22d3ee;--accent2:#a78bfa;--safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px)}
+*{box-sizing:border-box}
+html,body{height:100%;width:100%;overflow-x:hidden;background:var(--bg)}
+body{margin:0;font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:radial-gradient(80vw 80dvh at 70% -20%,#1e293b 0%,var(--bg) 60%);-webkit-tap-highlight-color:transparent}
+.app{display:grid;grid-template-rows:auto auto 1fr auto;min-height:100dvh;width:100%;max-width:1000px;margin:0 auto;padding:calc(8px + var(--safe-t)) calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) calc(8px + var(--safe-l))}
+header{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+h1{margin:0;font-size:clamp(22px,6vw,30px);font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.stats{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.bar{display:flex;gap:8px;align-items:center;justify-self:end;flex-wrap:wrap}
+.pill{padding:8px 12px;border-radius:999px;background:#0b1220;border:1px solid var(--line);font-size:13px;color:#cbd5e1;cursor:pointer}
+.pill:active{transform:translateY(1px)}
+.sticky{position:sticky;top:0;z-index:30;padding:6px 0 4px;background:linear-gradient(#0f172ab3,#0f172a00);backdrop-filter:blur(4px)}
+.sticky.hidden{display:none}
+.mini{display:flex;align-items:center;justify-content:center}
+.mini-btn{width:100%;border:none;border-radius:12px;padding:14px 16px;font-weight:900;font-size:18px;background:linear-gradient(160deg,#0ea5e9 0%,var(--accent) 60%,var(--accent2) 100%);color:#001018;cursor:pointer;user-select:none;touch-action:manipulation;box-shadow:inset 0 -6px 20px #0003,0 10px 26px #0006}
+.screen{position:relative;overflow:hidden;width:100%}
+.panel{background:linear-gradient(180deg,var(--panel),#0b1220cc);border:1px solid var(--line);border-radius:14px;padding:12px;backdrop-filter:blur(6px);box-shadow:0 10px 30px #0004;width:100%}
+.view{display:none;height:100%}.view.active{display:block}
+.compile-wrap{display:flex;flex-direction:column;gap:12px;min-height:calc(62dvh - 60px)}
+.big{flex:1 1 auto;width:100%;border-radius:16px;background:linear-gradient(160deg,#0ea5e9 0%,var(--accent) 50%,var(--accent2) 100%);color:#0b1020;font-size:clamp(28px,8vw,46px);font-weight:900;letter-spacing:.5px;cursor:pointer;box-shadow:inset 0 -12px 40px #0003,0 18px 36px #0006;border:none;position:relative;transition:transform .06s;overflow:hidden;display:grid;place-items:center;text-align:center;padding:12px;touch-action:manipulation;user-select:none}
+.big:active{transform:scale(.98)}
+.big small{position:absolute;bottom:12px;font-weight:600;opacity:.85;font-size:clamp(12px,3.6vw,14px)}
+.rows{display:flex;flex-direction:column;gap:10px;height:60dvh;overflow:auto;scrollbar-width:thin;padding-right:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#0b1220}
+.left{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.icon{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:#0e1629;border:1px solid #1e293b;overflow:hidden}
+.icon img{width:100%;height:100%;object-fit:cover}
+.meta{min-width:0}
+.row h3{margin:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row p{margin:2px 0 0;color:#9ca3af;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.subnote{font-size:12px;color:#9fbad1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.buy{border:none;padding:10px 12px;border-radius:10px;font-weight:800;cursor:pointer;background:var(--accent);color:#001018;box-shadow:0 6px 18px #22d3ee55}
+.buy[disabled],.buy[aria-disabled="true"]{cursor:not-allowed;background:#0b162a;color:#94a3b8;box-shadow:none;opacity:1}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 0 calc(12px + var(--safe-b));position:sticky;bottom:0;background:linear-gradient(#0f172a00,#0f172ab3);backdrop-filter:blur(4px);width:100%}
+.tab{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#0b1220;color:#cbd5e1;font-size:clamp(11px,3.4vw,14px);cursor:pointer;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab.active{background:var(--accent);color:#001018;box-shadow:0 8px 20px #22d3ee55}
+.floaty{position:absolute;pointer-events:none;left:0;top:0;transform:translate(-50%,-50%);font-weight:900;color:#001018;background:#22d3ee;padding:2px 8px;border-radius:999px;box-shadow:0 6px 20px #22d3ee66;opacity:.95;animation:rise 700ms ease-out forwards;font-size:clamp(12px,4vw,16px)}
+@keyframes rise{0%{transform:translate(-50%,-50%) translateY(0);opacity:.95}80%{transform:translate(-50%,-50%) translateY(-40px);opacity:.85}100%{transform:translate(-50%,-50%) translateY(-60px);opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(18px + var(--safe-b));transform:translateX(-50%);background:#0b1220;color:#cbd5e1;border:1px solid var(--line);padding:10px 14px;border-radius:10px;box-shadow:0 10px 30px #0007;font-size:14px;z-index:40;opacity:0;animation:fadeup 2.6s ease forwards;max-width:92vw;text-align:center}
+.toast.ach{border-color:#f59e0b;color:#111827;background:linear-gradient(180deg,#fde68a,#fbbf24);font-weight:900;animation-duration:3.6s}
+.toast.warn{border-color:#ef4444;color:#fee2e2;background:linear-gradient(180deg,#7f1d1d,#991b1b)}
+@keyframes fadeup{0%{transform:translate(-50%,10px);opacity:0}10%{transform:translate(-50%,0);opacity:1}80%{opacity:1}100%{transform:translate(-50%,-8px);opacity:0}}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:flex-start;justify-content:flex-end;padding:calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l))}
+.overlay.hidden{display:none}
+.pop{width:min(92vw,360px);background:#0b1220;border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 18px 50px #0007}
+.pop h3{margin:0 0 8px;font-size:18px}
+.rowline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0}
+.switch{appearance:none;width:46px;height:26px;border-radius:999px;background:#1f2937;position:relative;cursor:pointer;border:1px solid #0b0b0b}
+.switch:checked{background:#22d3ee}
+.switch:before{content:"";position:absolute;width:20px;height:20px;border-radius:999px;background:#0b1220;top:2.5px;left:3px;transition:left .2s}
+.switch:checked:before{left:23px}
+body,.rows,.panel,.big,.mini-btn{overscroll-behavior:contain}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1 id="bytes">0 Bytes</h1>
+      <div class="stats" id="stats">0.0 /s • 1 /click</div>
+    </div>
+    <div class="bar">
+      <button class="pill" id="saveBtn" type="button">Save</button>
+      <button class="pill" id="resetBtn" type="button">Reset</button>
+      <button class="pill" id="settingsBtn" type="button">⚙️ Settings</button>
+    </div>
+  </header>
+
+  <div class="sticky hidden" id="stickyBar">
+    <div class="mini"><button class="mini-btn" id="clickMini" type="button">Compile</button></div>
+  </div>
+
+  <div class="screen">
+    <section id="view-compile" class="view active" aria-hidden="false">
+      <div class="compile-wrap">
+        <button class="big" id="clickBtn" type="button">💾 Compile!<small>Tap to earn Bytes</small></button>
+        <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="font-size:12px;color:#9fbad1">Offline progress enabled</div>
+          <button class="pill" id="installBtn" style="display:none" type="button">Install</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-shop" class="view" aria-hidden="true">
+      <div class="panel" style="display:flex;flex-direction:column;gap:10px;height:100%;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <h2 style="margin:.2rem 0 .5rem">Shop</h2>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="pill qty" data-q="1" id="sq1" type="button">×1</button>
+            <button class="pill qty" data-q="10" id="sq10" type="button">×10</button>
+            <button class="pill qty" data-q="100" id="sq100" type="button">×100</button>
+            <button class="pill qty" data-q="max" id="sqmax" type="button">Max</button>
+          </div>
+        </div>
+        <div class="rows" id="store"></div>
+      </div>
+    </section>
+
+    <section id="view-upgrades" class="view" aria-hidden="true">
+      <div class="panel" style="display:flex;flex-direction:column;gap:10px;height:100%;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <h2 style="margin:.2rem 0 .5rem">Upgrades</h2>
+          <div style="font-size:12px;color:#9fbad1">Appears at 80% of price</div>
+        </div>
+        <div class="rows" id="upgrades"></div>
+      </div>
+    </section>
+
+    <section id="view-achievements" class="view" aria-hidden="true">
+      <div class="panel" style="display:flex;flex-direction:column;gap:10px;height:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <h2 style="margin:.2rem 0 .5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Achievements</h2>
+          <span id="achProgress" style="padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#0b1220;color:#0ea5e9;font-weight:800;font-size:12px">0/0</span>
+        </div>
+        <div class="rows" id="achievements"></div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="compile" type="button">Compile</button>
+    <button class="tab" data-view="shop" type="button">Shop</button>
+    <button class="tab" data-view="upgrades" type="button">Upgrades</button>
+    <button class="tab" data-view="achievements" type="button">Achievements</button>
+  </nav>
+</div>
+
+<div id="settingsOverlay" class="overlay hidden" aria-hidden="true">
+  <div class="pop" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h3 id="settingsTitle">Settings</h3>
+    <div class="rowline"><span>Mute sounds</span><input id="setMute" type="checkbox" class="switch"></div>
+    <div class="rowline"><span>Reduce effects (no +X)</span><input id="setFX" type="checkbox" class="switch"></div>
+    <div class="rowline"><span>Cap offline progress (24h)</span><input id="setCap" type="checkbox" class="switch" checked></div>
+    <div class="subnote">Tap outside to close.</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
