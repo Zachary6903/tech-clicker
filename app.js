@@ -117,13 +117,8 @@
     clickX:       { key:'clickX',       name:'Click Multiplier',     icon:'🌀', baseCost:  500, costRise: 1.6,  perLevel: 0.10, type:'multClick' }, // +10% click / level
     bpsX:         { key:'bpsX',         name:'Throughput',           icon:'📈', baseCost:  900, costRise: 1.63, perLevel: 0.08, type:'multBps'   }, // +8% BPS / level
     clickAdd:     { key:'clickAdd',     name:'Hotkeys',              icon:'⌨️', baseCost:  350, costRise: 1.7,  perLevel: 1,    type:'flatClick' }, // +1 click / level
-    turboThreads: { key:'turboThreads', name:'Turbo Threads',        icon:'🧵', baseCost: 1600, costRise: 1.8,  perLevel: 0.08, type:'multBps'   }, // +8% BPS / level
-    vectorize:    { key:'vectorize',    name:'Vectorization',        icon:'🧮', baseCost: 1400, costRise: 1.75, perLevel: 0.08, type:'multClick' }, // +8% click / level
     cache:        { key:'cache',        name:'Compiler Cache',       icon:'🧊', baseCost: 1300, costRise: 1.85, perLevel: 0.02, type:'discShop' }, // -2% shop prices per level (cap 50%)
-    autotap:      { key:'autotap',      name:'Auto-Tapping',         icon:'🤖', baseCost:  700, costRise: 1.7,  perLevel: 0.5,  type:'auto'     }, // +0.5 clicks/sec / level
     crit:         { key:'crit',         name:'Critical Clicks',      icon:'💥', baseCost: 1000, costRise: 1.8,  perLevel: 0.015,type:'crit'     }, // +1.5% crit chance / level
-    scheduler:    { key:'scheduler',    name:'Task Scheduler',       icon:'🗓️', baseCost: 1100, costRise: 1.7,  perLevel: 0.03, type:'multBps'   }, // +3% BPS / level
-    microOps:     { key:'microOps',     name:'Micro-ops',            icon:'🔧', baseCost:  600, costRise: 1.6,  perLevel: 0.03, type:'multClick' }  // +3% click / level
   };
 
   // =========================
