@@ -28,7 +28,7 @@
   // =========================
   const nice = ['#22d3ee','#60a5fa','#a78bfa','#7dd3fc','#34d399','#f472b6','#fb7185','#f59e0b','#ef4444','#22c55e'];
 
-  // Very-high short-scale formatter (then scientific)
+  // Rich/long formatter (used for body text, shop lines, toasts, etc.)
   const fmt = (n) => {
     if (!isFinite(n)) return '∞';
     if (n < 1e3) return Math.floor(n).toString();
@@ -45,6 +45,28 @@
     }
     return n.toExponential(2).replace('e+', 'e');
   };
+
+  // Super-short header formatter for BPS (exactly: k, M, B, T, q, Q)
+  function abbr(n){
+    if (!isFinite(n)) return '∞';
+    const abs = Math.abs(n);
+    if (abs < 1e3) return Math.floor(n).toString();
+    const units = [
+      {v:1e18, s:'Q'}, // quintillion
+      {v:1e15, s:'q'}, // quadrillion
+      {v:1e12, s:'T'}, // trillion
+      {v:1e9,  s:'B'}, // billion
+      {v:1e6,  s:'M'}, // million
+      {v:1e3,  s:'k'}, // thousand
+    ];
+    for (const u of units){
+      if (abs >= u.v){
+        const x = n / u.v;
+        return (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + ' ' + u.s;
+      }
+    }
+    return Math.floor(n).toString();
+  }
 
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g,'-');
   function makeIcon(label,bg="#0ea5e9",fg="#001018"){
@@ -75,8 +97,6 @@
   // Catalog (trimmed & rebalance)
   // Keep "StayWet Singularity" last
   // =========================
-  // Using friendlier base prices (×2) and solid BPS so early game pops,
-  // with gentle global growth (1.14) to avoid brick walls.
   const RAW_CATALOG = [
     ['Intern','🧑‍💻',15,0.12],
     ['Script Bot','🤖',80,0.9],
@@ -101,7 +121,7 @@
   const CATALOG = RAW_CATALOG.map((d,i)=>({
     id: slug(d[0]),
     name: d[0],
-    baseCost: Math.floor(d[2] * 2), // small bump to align with gentler growth
+    baseCost: Math.floor(d[2] * 2),
     bps: d[3],
     count: 0,
     emojiIcon: d[1],
@@ -112,13 +132,12 @@
   // =========================
   // Repeatable Upgrades (never run out)
   // =========================
-  // type: 'multClick' | 'multBps' | 'flatClick' | 'discShop' | 'auto' | 'crit'
   const REP_UPG = {
-    clickX:       { key:'clickX',       name:'Click Multiplier',     icon:'🌀', baseCost:  500, costRise: 1.6,  perLevel: 0.10, type:'multClick' }, // +10% click / level
-    bpsX:         { key:'bpsX',         name:'Throughput',           icon:'📈', baseCost:  900, costRise: 1.63, perLevel: 0.08, type:'multBps'   }, // +8% BPS / level
-    clickAdd:     { key:'clickAdd',     name:'Hotkeys',              icon:'⌨️', baseCost:  350, costRise: 1.7,  perLevel: 1,    type:'flatClick' }, // +1 click / level
-    cache:        { key:'cache',        name:'Compiler Cache',       icon:'🧊', baseCost: 1300, costRise: 1.85, perLevel: 0.02, type:'discShop' }, // -2% shop prices per level (cap 50%)
-    crit:         { key:'crit',         name:'Critical Clicks',      icon:'💥', baseCost: 1000, costRise: 1.8,  perLevel: 0.015,type:'crit'     }, // +1.5% crit chance / level
+    clickX:   { key:'clickX',   name:'Click Multiplier',   icon:'🌀', baseCost:  500, costRise: 1.6,  perLevel: 0.10, type:'multClick' }, // +10%/lvl
+    bpsX:     { key:'bpsX',     name:'Throughput',         icon:'📈', baseCost:  900, costRise: 1.63, perLevel: 0.08, type:'multBps'   }, // +8%/lvl
+    clickAdd: { key:'clickAdd', name:'Hotkeys',            icon:'⌨️', baseCost:  350, costRise: 1.7,  perLevel: 1,    type:'flatClick' }, // +1 /lvl
+    cache:    { key:'cache',    name:'Compiler Cache',     icon:'🧊', baseCost: 1300, costRise: 1.85, perLevel: 0.02, type:'discShop' }, // −2%/lvl (cap 50%)
+    crit:     { key:'crit',     name:'Critical Clicks',    icon:'💥', baseCost: 1000, costRise: 1.8,  perLevel: 0.015,type:'crit'     }, // +1.5%/lvl (cap 50%)
   };
 
   // =========================
@@ -371,6 +390,17 @@
   function achRow(a,done){const li=row({title:a.name,sub:a.desc,icon:{emojiIcon:a.icon,name:a.name},owned:done,asAch:true});if(done)li.classList.add('done');return li}
   function revealIfClose(b){const c=costOf(b);if(!b.unlocked&&S.bytes>=c*SHOW_THRESHOLD)b.unlocked=true;return b.unlocked}
 
+  // Spacer so the bottom item can always be tapped
+  const LIST_SPACER_PX = 120;
+  function appendListSpacer(container){
+    const sp = document.createElement('div');
+    sp.style.height = LIST_SPACER_PX + 'px';
+    sp.style.border = 'none';
+    sp.style.background = 'transparent';
+    sp.setAttribute('aria-hidden','true');
+    container.append(sp);
+  }
+
   // =========================
   // Repeatable Upgrades
   // =========================
@@ -403,11 +433,12 @@
   // Render
   // =========================
   function drawHeader(){
-    const mult = prestigeMult().toFixed(2);
-    coreBadge.textContent = `Cores: ${S.meta.cores}`;
+    // VERY SHORT STATUS: only Bytes per second
+    statsEl.textContent = `${abbr(bps())} /s`;
 
-    // Boost badge
-    if (boostActive()) {
+    // Core & boost badges
+    coreBadge.textContent = `Cores: ${S.meta.cores}`;
+    if (boostActive()){
       const ms = Math.max(0, S.boost.until - Date.now());
       const s  = Math.ceil(ms/1000);
       boostBadge.style.display = '';
@@ -417,8 +448,8 @@
       boostBadge.textContent = '';
     }
 
-    bytesEl.textContent=`${fmt(S.bytes)} Bytes`;
-    statsEl.textContent=`${bps().toFixed(1)} /s • ${Math.floor(clickPower())} /click • Cores: ${S.meta.cores} (×${mult})`;
+    // Big headline
+    bytesEl.textContent = `${fmt(S.bytes)} Bytes`;
   }
 
   function previewBulk(b,mode){
@@ -461,6 +492,7 @@
       li.innerHTML='<p style="margin:0;color:#9ca3af">Earn more Bytes to reveal shop items.</p>';
       storeEl.append(li);
     }
+    appendListSpacer(storeEl);
   }
 
   function repSubText(k, lvl){
@@ -493,6 +525,7 @@
         onBuy: ()=>{ if(buyRep(key)) changed(); else AudioFX.error(); }
       }));
     });
+    appendListSpacer(upgEl);
   }
 
   function drawAchievements(){
@@ -500,13 +533,14 @@
     if(S.total<ACHIEVE_LIST_UNLOCK_AT_TOTAL){
       const li=document.createElement('div');li.className='row';
       li.innerHTML=`<p style="margin:0;color:#9ca3af">Earn ${ACHIEVE_LIST_UNLOCK_AT_TOTAL}+ total Bytes to unlock the achievements list.</p>`;
-      achEl.append(li);achProgress.textContent=`0/${ACH.length}`;return;
+      achEl.append(li);achProgress.textContent=`0/${ACH.length}`;appendListSpacer(achEl);return;
     }
     const total=ACH.length;
     const have=ACH.reduce((n,a)=>n+(S.achievementsOwned[a.id]?1:0),0);
     achProgress.textContent=`${have}/${total}`;
     ACH.filter(a=>S.achievementsOwned[a.id]).forEach(a=>achEl.append(achRow(a,true)));
     ACH.filter(a=>!S.achievementsOwned[a.id]).forEach(a=>achEl.append(achRow(a,false)));
+    appendListSpacer(achEl);
   }
 
   function drawAll(){
