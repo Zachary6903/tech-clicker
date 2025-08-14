@@ -1,9 +1,10 @@
 /* Service Worker for Tech Clicker */
-const CACHE = 'tc-cache-v9';
+const CACHE = 'tc-cache-v10';
 
 const SHELL = [
   './',
   './index.html',
+  './style.css',
   './app.js',
   './manifest.json',
   './icons/icon-192.png',
