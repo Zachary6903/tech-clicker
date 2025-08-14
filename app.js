@@ -1,28 +1,33 @@
 (() => {
   'use strict';
 
-  // === Tunables (balanced) ===
-  const SAVE_KEY = 'tc_rebalanced_v3';
+  /**********************************************************
+   * Tech Clicker — full build (click fixes + big ACH list)
+   **********************************************************/
+
+  /* ========================= Tunables ========================= */
+  const SAVE_KEY = 'tc_rebalanced_v4';
   const SHOW_THRESHOLD = 0.88;
   const MAX_OFFLINE_HOURS = 24;
   const ACHIEVE_LIST_UNLOCK_AT_TOTAL = 0;
-  const costGrowth = 1.16;              // gentle, for longer pacing
+  const costGrowth = 1.16;            // shop price growth per item
 
   // Prestige (Cores)
-  const CORE_BASE = 1.2e7;              // ~12M Bytes for first core
-  const CORE_EXP  = 0.50;               // sqrt scaling
-  const CORE_BONUS_PER = 0.12;          // +12% production & click power per core
+  const CORE_BASE = 1.2e7;            // first core around 12M total
+  const CORE_EXP  = 0.50;             // sqrt scaling
+  const CORE_BONUS_PER = 0.12;        // +12% per core
 
-  // Golden event
-  const BASE_MIN_GAP = 60;              // seconds
+  // Golden event (like “golden cookie”)
+  const BASE_MIN_GAP = 60;            // seconds
   const BASE_MAX_GAP = 140;
   const BOOST_VIS_MS = 12000;
   const BOOST_DUR_MS = 30000;
-  const BOOST_RARE_CHANCE = 0.06;       // 6% chance for ×100 (otherwise ×10)
+  const BOOST_RARE_CHANCE = 0.06;     // 6% chance for ×100
 
-  // === Utils ===
+  /* ========================= Utils ========================= */
   const nice = ['#22d3ee','#60a5fa','#a78bfa','#7dd3fc','#34d399','#f472b6','#fb7185','#f59e0b','#ef4444','#22c55e'];
   const fmt = (n) => {
+    // short human format for header & UI
     if (!isFinite(n)) return '∞';
     if (n < 1e3) return Math.floor(n).toString();
     const units = [
@@ -51,6 +56,7 @@
     return "data:image/svg+xml;utf8,"+encodeURIComponent(svg);
   }
 
+  // tiny audio pings
   const AudioFX=(()=>{let ctx;function ac(){ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();return ctx}
     function beep({f=440,t=.06,type='square',g=.05}={}){if(S.settings.muted)return;const c=ac(),o=c.createOscillator(),v=c.createGain();o.type=type;o.frequency.setValueAtTime(f,c.currentTime);v.gain.value=g;o.connect(v).connect(c.destination);o.start();v.gain.exponentialRampToValueAtTime(.0001,c.currentTime+t);o.stop(c.currentTime+t+.01)}
     return{
@@ -62,73 +68,89 @@
       error(){beep({f:160,t:.1,type:'sawtooth',g:.07})}
     }})();
 
-  // === Catalog (reduced, keep last = StayWet) ===
+  /* ========================= Catalog =========================
+     Reduced list (keeps last = StayWet). Cheaper starters for
+     friendlier early game. Costs will grow via costGrowth.     */
   const RAW_CATALOG = [
-    ['Intern','🧑‍💻',20,0.10],
-    ['Script Bot','🤖',120,0.8],
-    ['Cloud Instance','☁️',500,5],
-    ['Build Server','🖥️',1600,10],
-    ['ML Training Rig','🧠',12000,150],
-    ['Data Center Rack','🗄️',120000,1100],
-    ['AI Lab','🧪',1200000,10000],
-    ['Quantum Simulator','🧮',12000000,90000],
-    ['Neural Forge','⚒️',8e7,300000],
-    ['GPU Geyser','⛲',3.2e8,650000],
-    ['Router Reef','🪸',1.1e9,1400000],
-    ['Thread Tide','🌐',3.8e9,2600000],
-    ['Core Cove','🏝️',1.4e10,5200000],
-    ['Dev Delta','🌀',5.0e10,11000000],
-    ['Compiler Canyon','🏞️',1.0e11,37000000],
-    ['Quantum Quay','⚛️',1.6e11,62000000],
-    ['Neural Nebula','🌌',2.2e11,90000000],
-    ['StayWet Singularity','💧',4.0e11,180000000]  // keep last
+    ['Intern','🧑‍💻', 20,      0.10],
+    ['Script Bot','🤖', 120,    0.8],
+    ['Cloud Instance','☁️', 500,5],
+    ['Build Server','🖥️', 1600, 10],
+    ['ML Training Rig','🧠', 12000, 150],
+    ['Data Center Rack','🗄️', 120000, 1100],
+    ['AI Lab','🧪', 1200000, 10000],
+    ['Quantum Simulator','🧮', 12000000, 90000],
+    ['Neural Forge','⚒️', 8e7, 300000],
+    ['GPU Geyser','⛲', 3.2e8, 650000],
+    ['Router Reef','🪸', 1.1e9, 1400000],
+    ['Thread Tide','🌐', 3.8e9, 2600000],
+    ['Core Cove','🏝️', 1.4e10, 5200000],
+    ['Dev Delta','🌀', 5.0e10, 11000000],
+    ['Compiler Canyon','🏞️', 1.0e11, 37000000],
+    ['Quantum Quay','⚛️', 1.6e11, 62000000],
+    ['Neural Nebula','🌌', 2.2e11, 90000000],
+    ['StayWet Singularity','💧', 4.0e11, 180000000]
   ];
   const CATALOG = RAW_CATALOG.map((d,i)=>({
     id: slug(d[0]), name:d[0],
-    baseCost: Math.floor(d[2]*2),    // small bump; growth controls pacing
+    baseCost: Math.floor(d[2]*2), // small bump; pacing controlled by growth
     bps: d[3],
     count: 0, emojiIcon:d[1],
     imgUrl: makeIcon(d[1], nice[i % nice.length]),
     unlocked:false
   }));
 
-  // === Repeatable upgrades (5 tracks) ===
-  // type: 'multBps' | 'flatClick' | 'discShop' | 'crit' | 'golden'
+  /* ========================= Repeatable Upgrades =========================
+     Always available. Costs scale with level; effects stack.               */
   const REP_UPG = {
     bpsX:     { key:'bpsX',     name:'Production Boost',  icon:'📈', baseCost: 1200, costRise: 1.72, perLevel: 0.06, type:'multBps'   }, // +6% BPS
     clickAdd: { key:'clickAdd', name:'Hotkeys (+1 Click)',icon:'⌨️', baseCost:  600, costRise: 1.78, perLevel: 1,    type:'flatClick' }, // +1 /click
-    cache:    { key:'cache',    name:'Compiler Cache',    icon:'🧊', baseCost: 1600, costRise: 1.90, perLevel: 0.01, type:'discShop' }, // -1% shop prices (cap 40%)
+    cache:    { key:'cache',    name:'Compiler Cache',    icon:'🧊', baseCost: 1600, costRise: 1.90, perLevel: 0.01, type:'discShop' }, // -1% prices (cap 40%)
     crit:     { key:'crit',     name:'Critical Clicks',   icon:'💥', baseCost: 2000, costRise: 1.85, perLevel: 0.01, type:'crit'     }, // +1% crit (cap 30%)
-    golden:   { key:'golden',   name:'Golden Chance',     icon:'⭐', baseCost: 1800, costRise: 1.80, perLevel: 0.02, type:'golden'   }  // −2% spawn gap/level (cap ~50%)
+    golden:   { key:'golden',   name:'Golden Chance',     icon:'⭐', baseCost: 1800, costRise: 1.80, perLevel: 0.02, type:'golden'   }  // 2% faster spawns/level
   };
 
-  // === Achievements (lots, wrap-friendly texts) ===
+  /* ========================= Achievements =========================
+     Big list so you’ll always have goals.                             */
   function genAchievements(){
     const ach = [];
     let idc = 1; const push=(icon,name,desc,test)=>ach.push({id:'a'+(idc++),icon,name,desc,test});
-    // totals
-    [1e2,1e3,1e4,1e5,1e6,1e7,1e8,1e9,1e10,1e11,1e12].forEach((m,i)=>push('💾',`Bytes ${i+1}`,`Earn ${fmt(m)} total Bytes.`,s=>s.total>=m));
-    // click power
-    [10,25,50,100,250,500,1e3,2e3,5e3,1e4].forEach((m,i)=>push('🖱️',`Click Power ${i+1}`,`Reach ${fmt(m)} /click.`,s=>clickPower(s)>=m));
-    // bps
-    [10,50,100,250,500,1e3,5e3,1e4,2e4,5e4].forEach((m,i)=>push('⏱️',`Throughput ${i+1}`,`Reach ${fmt(m)} BPS.`,s=>bps(s)>=m));
-    // buildings
-    [5,10,25,50,75,100,150,200].forEach((m,i)=>push('🏗️',`Builder ${i+1}`,`Own ${m} total items.`,s=>s.buildings.reduce((n,b)=>n+b.count,0)>=m));
-    // specials
+
+    // Totals — many tiers (Bytes earned total)
+    const totalTargets = [
+      1e2,1e3,1e4,5e4,1e5,5e5,1e6,5e6,1e7,5e7,1e8,5e8,1e9,5e9,1e10,5e10,1e11,5e11,1e12,5e12,
+      1e13,5e13,1e14,5e14,1e15
+    ];
+    totalTargets.forEach((m,i)=>push('💾',`Total ${i+1}`,`Earn ${fmt(m)} total Bytes.`,s=>s.total>=m));
+
+    // Click power tiers
+    [10,25,50,100,250,500,1e3,2e3,5e3,1e4,2e4,5e4].forEach((m,i)=>push('🖱️',`Click ${i+1}`,`Reach ${fmt(m)} /click.`,s=>clickPower(s)>=m));
+
+    // BPS tiers
+    [10,50,100,250,500,1e3,2e3,5e3,1e4,2e4,5e4,1e5,2e5,5e5,1e6].forEach((m,i)=>push('⏱️',`Throughput ${i+1}`,`Reach ${fmt(m)} BPS.`,s=>bps(s)>=m));
+
+    // Buildings owned count
+    [1,5,10,25,50,75,100,125,150,175,200].forEach((m,i)=>push('🏗️',`Builder ${i+1}`,`Own ${m} total items.`,s=>s.buildings.reduce((n,b)=>n+b.count,0)>=m));
+
+    // Special checks
+    push('🛒','First Buy','Buy your first item.',s=>s.buildings.some(b=>b.count>0));
     push('🕒','Time Is Money','Earn offline Bytes.',s=>s.meta.offlineEarned>0);
     push('⭐','Golden Build','Click a Golden Build orb.',s=>s.meta.goldenHits>0);
     push('🔱','First Core','Earn your first Compiler Core.',s=>s.meta.cores>=1);
+    push('🏆','Prestigious','Ascend at least once.',s=>s.meta.runs>=1);
+    push('💧','StayWet Moment','Own StayWet Singularity.',s=>(s.buildings.find(b=>b.id==='staywet-singularity')||{count:0}).count>=1);
+
     return ach;
   }
   const ACH = genAchievements();
 
-  // === Prestige ===
+  /* ========================= Prestige ========================= */
   const prestigeMult = (st=S) => 1 + (st.meta.cores||0) * CORE_BONUS_PER;
   const coresFromRun  = (runTotal) => Math.max(0, Math.floor(Math.pow(runTotal / CORE_BASE, CORE_EXP)));
 
-  // === State ===
+  /* ========================= State ========================= */
   const S = {
-    bytes:0,total:0,baseClick:1,
+    bytes:0,total:0,baseClick:1,               // start click at 1 (you asked for 1 not 2)
     clickMult:1,bpsMult:1,buyQty:'1',
     shopDiscPct:0, autoPerSec:0, critChance:0, goldenLvl:0,
     settings:{muted:false,reduceFx:false,capOffline:true},
@@ -139,7 +161,7 @@
     meta:{lastActive:Date.now(),offlineEarned:0,cores:0,runs:0,bestRunTotal:0,lifetimeTotal:0,goldenHits:0}
   };
 
-  // === DOM ===
+  /* ========================= DOM ========================= */
   const bytesEl=document.getElementById('bytes'),statsEl=document.getElementById('stats');
   const clickBtn=document.getElementById('clickBtn'),clickMini=document.getElementById('clickMini'),stickyBar=document.getElementById('stickyBar');
   const storeEl=document.getElementById('store'),upgEl=document.getElementById('upgrades'),achEl=document.getElementById('achievements'),achProgress=document.getElementById('achProgress');
@@ -149,13 +171,13 @@
   const settingsBtn=document.getElementById('settingsBtn'),settingsOverlay=document.getElementById('settingsOverlay'),settingsPop=settingsOverlay.querySelector('.pop');
   const setMute=document.getElementById('setMute'),setFX=document.getElementById('setFX'),setCap=document.getElementById('setCap');
   const saveBtn=document.getElementById('saveBtn');
-  const resetBtn=document.getElementById('resetBtn');
+  const resetBtn=document.getElementById('resetBtn');          // will remove (Ascend replaces)
   const installBtn=document.getElementById('installBtn');
 
-  // remove Reset (Ascend replaces it)
+  // kill Reset (Ascend handles resets)
   if (resetBtn && resetBtn.parentElement) resetBtn.parentElement.removeChild(resetBtn);
 
-  // Header pills: cores & boost & ascend
+  // Header: show cores + active boost + ascend button
   const headerBar = document.querySelector('.bar');
   const coreBadge = document.createElement('div'); coreBadge.id='coreBadge'; coreBadge.className='pill'; coreBadge.style.cursor='default'; coreBadge.textContent='Cores: 0';
   headerBar && headerBar.insertBefore(coreBadge, headerBar.firstChild);
@@ -164,7 +186,7 @@
   const ascendBtn = document.createElement('button'); ascendBtn.className='pill'; ascendBtn.type='button'; ascendBtn.id='ascendBtn'; ascendBtn.textContent='Ascend';
   headerBar && headerBar.appendChild(ascendBtn);
 
-  // Exact line under title
+  // Exact line under title (full exact value + copy)
   const titleWrap = bytesEl.parentElement;
   const exactLine = document.createElement('div');
   exactLine.className = 'exact-line';
@@ -179,7 +201,7 @@
     navigator.clipboard?.writeText(String(Math.floor(S.bytes))).then(()=>AudioFX.pop());
   }, {passive:true});
 
-  // Prestige modal
+  /* ========================= Prestige Modal ========================= */
   const prestigeOverlay = document.createElement('div');
   prestigeOverlay.className = 'overlay hidden';
   prestigeOverlay.id = 'prestigeOverlay';
@@ -204,7 +226,7 @@
   const cancelAscendBtn = prestigeOverlay.querySelector('#cancelAscend');
   const prestigePop = prestigeOverlay.querySelector('.pop');
 
-  // Golden orb
+  /* ========================= Golden Orb ========================= */
   const orb = document.createElement('div');
   orb.style.cssText = `
     position: fixed; width: 58px; height: 58px; border-radius: 50%;
@@ -215,10 +237,10 @@
   orb.setAttribute('aria-label','Golden Build');
   document.body.appendChild(orb);
 
-  // Toast system
+  /* ========================= Toasts ========================= */
   const Toast=(()=>{const q=[];let showing=false;function next(){if(showing)return;const it=q.shift();if(!it)return;showing=true;const el=document.createElement('div');el.className='toast'+(it.cls?(' '+it.cls):'');el.textContent=it.msg;document.body.appendChild(el);setTimeout(()=>{el.remove();showing=false;setTimeout(next,120)},it.duration||2600)}return{push:(m,c='',d=null)=>{q.push({msg:m,cls:c,duration:d});next()},ach:m=>{q.push({msg:m,cls:'ach',duration:3600});next()},warn:m=>{q.push({msg:m,cls:'warn',duration:3000});next()}})();
 
-  // Helpers
+  /* ========================= Core Helpers ========================= */
   const shopCostMult = (st=S)=> Math.max(0.6, 1 - Math.min(0.4, (st.shopDiscPct||0))); // cap 40% off
   const costOf     = b => Math.floor(b.baseCost * shopCostMult() * Math.pow(costGrowth, b.count));
   const nextCostAt = (b,off)=> Math.floor(b.baseCost * shopCostMult() * Math.pow(costGrowth, b.count + off));
@@ -233,11 +255,11 @@
   const clickPower = (st=S)=> clickBase(st) * prestigeMult(st) * boostMult(st);
 
   function iconNode(item){const box=document.createElement('div');box.className='icon';const img=document.createElement('img');img.alt=item.name||'icon';img.src=item.imgUrl||'';if(!item.imgUrl){box.textContent=item.emojiIcon||'💾';box.style.fontSize='22px'}else box.append(img);return box}
-  function row({title,sub,onBuy=()=>{},icon,owned=false,asAch=false,disabled=false,footNote='',cta='Buy'}){const li=document.createElement('div');li.className='row'+(asAch?' ach':'');const left=document.createElement('div');left.className='left';left.append(iconNode(icon||{emojiIcon:'💾',name:title}));const meta=document.createElement('div');meta.className='meta';const h=document.createElement('h3');h.textContent=title+(owned?' ✓':'');const p=document.createElement('p');p.textContent=sub;meta.append(h,p);if(footNote){const s=document.createElement('div');s.className='subnote';s.textContent=footNote;meta.append(s)}left.append(meta);li.append(left);if(!asAch){const b=document.createElement('button');b.className='buy';b.textContent=owned?'Owned':cta;b.disabled=owned||disabled;b.setAttribute('aria-disabled',b.disabled?'true':'false');b.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;onBuy(e)},{passive:true});li.append(b)}return li}
+  function row({title,sub,onBuy=()=>{},icon,owned=false,asAch=false,disabled=false,footNote='',cta='Buy'}){const li=document.createElement('div');li.className='row'+(asAch?' ach':'');const left=document.createElement('div');left.className='left';left.append(iconNode(icon||{emojiIcon:'💾',name:title}));const meta=document.createElement('div');meta.className='meta';const h=document.createElement('h3');h.textContent=title+(owned?' ✓':'');const p=document.createElement('p');p.textContent=sub;meta.append(h,p);if(footNote){const s=document.createElement('div');s.className='subnote';s.textContent=footNote;meta.append(s)}left.append(meta);li.append(left);if(!asAch){const b=document.createElement('button');b.className='buy';b.textContent=owned?'Owned':cta;b.disabled=owned||disabled;b.setAttribute('aria-disabled',b.disabled?'true':'false');b.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;onBuy(e)},{passive:true});b.addEventListener('click',e=>{onBuy(e)});li.append(b)}return li}
   function achRow(a,done){const li=row({title:a.name,sub:a.desc,icon:{emojiIcon:a.icon,name:a.name},owned:done,asAch:true});if(done)li.classList.add('done');return li}
   function revealIfClose(b){const c=costOf(b);if(!b.unlocked&&S.bytes>=c*SHOW_THRESHOLD)b.unlocked=true;return b.unlocked}
 
-  // Repeatable upgrades logic
+  /* ========================= Repeatable Upgrades ========================= */
   function repCost(key, lvl){const cfg=REP_UPG[key];return Math.floor(cfg.baseCost * Math.pow(cfg.costRise, lvl));}
   function applyRepEffect(key, times=1){
     const cfg = REP_UPG[key]; if(!cfg||times<=0) return;
@@ -245,7 +267,7 @@
     if (cfg.type==='flatClick') S.baseClick += cfg.perLevel * times;
     if (cfg.type==='discShop')  S.shopDiscPct = Math.min(0.4, S.shopDiscPct + cfg.perLevel * times);
     if (cfg.type==='crit')      S.critChance = Math.min(0.30, (S.critChance||0) + cfg.perLevel * times);
-    if (cfg.type==='golden')    S.goldenLvl  = (S.goldenLvl||0) + times;  // affects spawn timings
+    if (cfg.type==='golden')    S.goldenLvl  = (S.goldenLvl||0) + times;
   }
   function buyRep(key){
     const lvl=S.repLvls[key]||0; const cost=repCost(key,lvl);
@@ -253,7 +275,7 @@
     S.bytes-=cost; S.repLvls[key]=lvl+1; applyRepEffect(key,1); AudioFX.buy(1); return true;
   }
 
-  // Render
+  /* ========================= Renderers ========================= */
   function drawHeader(){
     const mult = prestigeMult().toFixed(2);
     coreBadge.textContent = `Cores: ${S.meta.cores}`;
@@ -266,8 +288,8 @@
       boostBadge.style.display = 'none';
       boostBadge.textContent = '';
     }
-    bytesEl.textContent = `${fmt(S.bytes)} Bytes`;     // short, never pushes layout
-    bytesExactEl.textContent = comma(S.bytes);         // full exact below
+    bytesEl.textContent = `${fmt(S.bytes)} Bytes`;     // short (won’t push layout)
+    bytesExactEl.textContent = comma(S.bytes);         // exact under title
     statsEl.textContent = `${bps().toFixed(1)} /s • ${Math.floor(clickPower())} /click • Cores: ${S.meta.cores} (×${mult})`;
   }
 
@@ -290,9 +312,21 @@
       const can=isMax?qty>=1:S.bytes>=cost;
       const sub=`${b.bps} bps each • Next: ${fmt(next)}`;
       const foot=isMax?`Max right now: ${qty} • Total: ${fmt(cost)}`:`Buy ×${S.buyQty.toUpperCase()} • Total: ${fmt(cost)}`;
-      storeEl.append(row({title:`${b.name} — ${b.count}`,sub,footNote:foot,icon:b,disabled:!can,onBuy:(e)=>{const mode=e.altKey?'max':(e.ctrlKey||e.metaKey)?'100':e.shiftKey?'10':S.buyQty;const got=buyExact(b,mode);if(got>0){AudioFX.buy(got);changed()}else AudioFX.error()}}));
+      storeEl.append(row({
+        title:`${b.name} — ${b.count}`,
+        sub, footNote:foot, icon:b, disabled:!can,
+        onBuy:(e)=>{
+          const mode=e && (e.altKey?'max':(e.ctrlKey||e.metaKey)?'100':e.shiftKey?'10':S.buyQty) || S.buyQty;
+          const got=buyExact(b,mode);
+          if(got>0){AudioFX.buy(got);changed()}else AudioFX.error();
+        }
+      }));
     });
-    if(!storeEl.children.length){const li=document.createElement('div');li.className='row';li.innerHTML='<p style="margin:0;color:#9ca3af">Earn more Bytes to reveal shop items.</p>';storeEl.append(li)}
+    if(!storeEl.children.length){
+      const li=document.createElement('div');li.className='row';
+      li.innerHTML='<p style="margin:0;color:#9ca3af">Earn more Bytes to reveal shop items.</p>';
+      storeEl.append(li);
+    }
   }
 
   function repSubText(k, lvl){
@@ -310,14 +344,21 @@
     upgEl.innerHTML='';
     Object.keys(REP_UPG).forEach(key=>{
       const cfg = REP_UPG[key]; const lvl=S.repLvls[key]||0; const cost=repCost(key,lvl); const afford=S.bytes>=cost;
-      upgEl.append(row({title:`${cfg.name} — Lv ${lvl}`,sub:repSubText(key,lvl),icon:{emojiIcon:cfg.icon,name:cfg.name},disabled:!afford,cta:'Upgrade',onBuy:()=>{if(buyRep(key)) changed(); else AudioFX.error();}}));
+      upgEl.append(row({
+        title:`${cfg.name} — Lv ${lvl}`,
+        sub:repSubText(key,lvl), icon:{emojiIcon:cfg.icon,name:cfg.name},
+        disabled:!afford, cta:'Upgrade',
+        onBuy:()=>{ if(buyRep(key)) changed(); else AudioFX.error(); }
+      }));
     });
   }
 
   function drawAchievements(){
     achEl.innerHTML='';
     if(S.total<ACHIEVE_LIST_UNLOCK_AT_TOTAL){
-      const li=document.createElement('div');li.className='row';li.innerHTML=`<p style="margin:0;color:#9ca3af">Earn ${ACHIEVE_LIST_UNLOCK_AT_TOTAL}+ total Bytes to unlock the achievements list.</p>`;achEl.append(li);achProgress.textContent=`0/${ACH.length}`;return;
+      const li=document.createElement('div');li.className='row';
+      li.innerHTML=`<p style="margin:0;color:#9ca3af">Earn ${ACHIEVE_LIST_UNLOCK_AT_TOTAL}+ total Bytes to unlock the achievements list.</p>`;
+      achEl.append(li); achProgress.textContent=`0/${ACH.length}`; return;
     }
     const total=ACH.length; const have=ACH.reduce((n,a)=>n+(S.achievementsOwned[a.id]?1:0),0);
     achProgress.textContent=`${have}/${total}`;
@@ -325,19 +366,63 @@
     ACH.filter(a=>!S.achievementsOwned[a.id]).forEach(a=>achEl.append(achRow(a,false)));
   }
 
-  function drawAll(){drawHeader();if(currentView==='shop')drawStore();if(currentView==='upgrades')drawUpgrades();if(currentView==='achievements')drawAchievements();refreshQtyTabs()}
+  function drawAll(){
+    drawHeader();
+    if(currentView==='shop')drawStore();
+    if(currentView==='upgrades')drawUpgrades();
+    if(currentView==='achievements')drawAchievements();
+    refreshQtyTabs();
+  }
 
-  // FX & achievements
-  function spawnFloat(targetEl,x,y,text,cls=''){if(S.settings.reduceFx)return;const r=targetEl.getBoundingClientRect();const s=document.createElement('div');s.className='floaty'+(cls?(' '+cls):'');s.textContent=`+${text}`;s.style.left=(x!=null?x-r.left:r.width/2)+'px';s.style.top=(y!=null?y-r.top:r.height/2)+'px';targetEl.appendChild(s);setTimeout(()=>s.remove(),800)}
-  function checkAchievements(){let any=false;for(const a of ACH){if(!S.achievementsOwned[a.id]&&a.test(S)){S.achievementsOwned[a.id]=true;any=true;Toast.ach(`🏆 ${a.name} — ${a.desc}`)}}if(any && currentView==='achievements') drawAchievements()}
+  /* ========================= FX & Achievements ========================= */
+  function spawnFloat(targetEl,x,y,text,cls=''){
+    if(S.settings.reduceFx) return;
+    const r=targetEl.getBoundingClientRect();
+    const s=document.createElement('div');
+    s.className='floaty'+(cls?(' '+cls):'');
+    s.textContent=`+${text}`;
+    s.style.left=(x!=null?x-r.left:r.width/2)+'px';
+    s.style.top=(y!=null?y-r.top:r.height/2)+'px';
+    targetEl.appendChild(s);
+    setTimeout(()=>s.remove(),800);
+  }
+  function checkAchievements(){
+    let any=false;
+    for(const a of ACH){
+      if(!S.achievementsOwned[a.id]&&a.test(S)){
+        S.achievementsOwned[a.id]=true; any=true;
+        Toast.ach(`🏆 ${a.name} — ${a.desc}`);
+      }
+    }
+    if(any && currentView==='achievements') drawAchievements();
+  }
 
-  // Prestige UI
-  function openPrestige(){const runTotal=S.total;const potential=coresFromRun(runTotal);coreCountEl.textContent=`${S.meta.cores}`;corePotentialEl.textContent=`${potential}`;coreMultEl.textContent=`×${(1+(S.meta.cores+potential)*CORE_BONUS_PER).toFixed(2)}`;prestigeOverlay.classList.remove('hidden');prestigeOverlay.setAttribute('aria-hidden','false')}
-  function closePrestige(){prestigeOverlay.classList.add('hidden');prestigeOverlay.setAttribute('aria-hidden','true')}
-  ascendBtn.addEventListener('click',()=>{const potential=coresFromRun(S.total);if(potential<=0)Toast.warn('Keep building Bytes to earn Cores from Ascend!');openPrestige();},{passive:true});
+  /* ========================= Prestige UI + Logic ========================= */
+  function openPrestige(){
+    const runTotal=S.total;
+    const potential=coresFromRun(runTotal);
+    coreCountEl.textContent=`${S.meta.cores}`;
+    corePotentialEl.textContent=`${potential}`;
+    coreMultEl.textContent=`×${(1+(S.meta.cores+potential)*CORE_BONUS_PER).toFixed(2)}`;
+    prestigeOverlay.classList.remove('hidden');
+    prestigeOverlay.setAttribute('aria-hidden','false');
+  }
+  function closePrestige(){
+    prestigeOverlay.classList.add('hidden');
+    prestigeOverlay.setAttribute('aria-hidden','true');
+  }
+  const openAscend = ()=>{const potential=coresFromRun(S.total);if(potential<=0)Toast.warn('Keep building Bytes to earn Cores from Ascend!');openPrestige();};
+
+  // Open via button
+  const handleAscendOpen = (e)=>{e?.preventDefault?.(); openAscend();};
+  // Attach both pointer and click for reliability
+  ascendBtn.addEventListener('pointerdown',handleAscendOpen,{passive:false});
+  ascendBtn.addEventListener('click',handleAscendOpen);
+
   prestigeOverlay.addEventListener('click',e=>{if(e.target===prestigeOverlay)closePrestige()},{passive:true});
   prestigePop.addEventListener('click',e=>e.stopPropagation(),{passive:true});
   cancelAscendBtn.addEventListener('click',closePrestige,{passive:true});
+
   function performAscend(coresGained){
     const runTotal=S.total;
     S.meta.lifetimeTotal+=runTotal;
@@ -357,13 +442,15 @@
     Toast.push(`Ascended! +${coresGained} Core${coresGained===1?'':'s'} • New mult ×${prestigeMult().toFixed(2)}`);
     closePrestige(); changed();
   }
-  confirmAscendBtn.addEventListener('click',()=>{const g=coresFromRun(S.total);if(g<=0){AudioFX.error();return}performAscend(g)},{passive:true});
+  const handleAscendConfirm=(e)=>{e?.preventDefault?.(); const g=coresFromRun(S.total); if(g<=0){AudioFX.error();return} performAscend(g);};
+  confirmAscendBtn.addEventListener('pointerdown',handleAscendConfirm,{passive:false});
+  confirmAscendBtn.addEventListener('click',handleAscendConfirm);
 
-  // Golden event scheduling (goldenLvl reduces gaps up to ~50%)
+  /* ========================= Golden Event ========================= */
   let orbHideTimer=null, nextSpawnTimer=null;
   function goldenGapMs(){
     const lvl = S.goldenLvl||0;
-    const factor = Math.max(0.5, 1 - 0.02*lvl); // 2% faster per level (cap 50%)
+    const factor = Math.max(0.5, 1 - 0.02*lvl); // 2% faster per level, cap 50%
     const min = BASE_MIN_GAP * factor;
     const max = BASE_MAX_GAP * factor;
     return (min + Math.random()*(max-min)) * 1000;
@@ -378,7 +465,7 @@
     clearTimeout(orbHideTimer);
     orbHideTimer=setTimeout(()=>{orb.style.display='none';scheduleOrb()},BOOST_VIS_MS);
   }
-  orb.addEventListener('pointerdown',(e)=>{
+  function onOrbClick(e){
     if(e.pointerType==='mouse'&&e.button!==0)return;
     e.preventDefault();
     orb.style.display='none'; clearTimeout(orbHideTimer);
@@ -389,33 +476,48 @@
     AudioFX.rare();
     Toast.push(rare?'🌟 Ultra Build! ×100 for 30s':'⭐ Golden Build! ×10 for 30s');
     changed(); scheduleOrb();
-  },{passive:false});
+  }
+  orb.addEventListener('pointerdown', onOrbClick, {passive:false});
+  orb.addEventListener('click', (e)=>{e.preventDefault(); onOrbClick(e);});
 
-  // Input
+  /* ========================= Input (CLICK FIXES) =========================
+     Some browsers (and mobile) can ignore pointerdown under certain
+     conditions or when passive listeners are used incorrectly. We attach
+     BOTH pointer and click handlers to guarantee it always works.       */
   function doClick(targetEl,cx,cy){
     const isCrit=Math.random()<(S.critChance||0);
     const critMul=isCrit?2:1;
-    const add=Math.floor(clickPower()*critMul);
+    const add=Math.max(1, Math.floor(clickPower()*critMul));
     S.bytes+=add; S.total+=add;
     AudioFX.click();
     spawnFloat(targetEl,cx,cy,Math.round(add),isCrit?'crit':'');
     changed();
   }
-  clickBtn.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;doClick(clickBtn,e.clientX,e.clientY);e.preventDefault()},{passive:false});
-  clickMini.addEventListener('pointerdown',e=>{doClick(clickMini,e.clientX,e.clientY);e.preventDefault()},{passive:false});
+  const onBigPointer = (e)=>{ if(e.pointerType==='mouse'&&e.button!==0) return; doClick(clickBtn,e.clientX,e.clientY); e.preventDefault(); };
+  const onBigClick   = (e)=>{ doClick(clickBtn, e.clientX||null, e.clientY||null); };
+  const onMiniPointer= (e)=>{ doClick(clickMini,e.clientX,e.clientY); e.preventDefault(); };
+  const onMiniClick  = (e)=>{ doClick(clickMini, e.clientX||null, e.clientY||null); };
 
-  // Tabs
+  // attach both pointer and click (reliable across devices)
+  clickBtn.addEventListener('pointerdown', onBigPointer, {passive:false});
+  clickBtn.addEventListener('click', onBigClick);
+  clickMini.addEventListener('pointerdown', onMiniPointer, {passive:false});
+  clickMini.addEventListener('click', onMiniClick);
+
+  /* ========================= Tabs ========================= */
   let currentView='compile';
-  tabs.addEventListener('click',(e)=>{
+  function onTabClick(e){
     const btn=e.target.closest('button[data-view]'); if(!btn) return;
     const which=btn.dataset.view; currentView=which;
     [...tabs.querySelectorAll('button[data-view]')].forEach(b=>b.classList.toggle('active',b===btn));
     Object.entries(views).forEach(([k,el])=>{const act=(k===which);el.classList.toggle('active',act);el.setAttribute('aria-hidden',act?'false':'true')});
     stickyBar.classList.toggle('hidden',which==='compile');
     drawAll();
-  });
+  }
+  tabs.addEventListener('pointerdown', onTabClick, {passive:true});
+  tabs.addEventListener('click', onTabClick);
 
-  // Change & loop
+  /* ========================= Change & Loop ========================= */
   function changed(){
     drawHeader();
     if(currentView==='shop')drawStore();
@@ -436,23 +538,23 @@
     requestAnimationFrame(loop);
   }
 
-  // Qty
+  /* ========================= Qty ========================= */
   function setQty(q){S.buyQty=q;refreshQtyTabs();if(views.shop.classList.contains('active'))drawStore()}
   function refreshQtyTabs(){qtyBtns.forEach(btn=>{if(!btn)return;const active=S.buyQty===btn.dataset.q;btn.classList.toggle('active',active);btn.style.background=active?'var(--accent)':'#0b1220';btn.style.color=active?'#001018':'#cbd5e1';btn.style.boxShadow=active?'0 6px 18px #22d3ee55':'none'})}
   qtyBtns.forEach(btn=>btn.addEventListener('click',()=>setQty(btn.dataset.q),{passive:true}));
 
-  // Settings
+  /* ========================= Settings ========================= */
   function openSettings(){settingsOverlay.classList.remove('hidden');settingsOverlay.setAttribute('aria-hidden','false');setMute.checked=!!S.settings.muted;setFX.checked=!!S.settings.reduceFx;setCap.checked=!!S.settings.capOffline}
   function closeSettings(){settingsOverlay.classList.add('hidden');settingsOverlay.setAttribute('aria-hidden','true')}
   settingsBtn.addEventListener('click',e=>{e.stopPropagation();openSettings()},{passive:true});
   settingsOverlay.addEventListener('click',e=>{if(e.target===settingsOverlay)closeSettings()},{passive:true});
-  prestigePop.addEventListener('click',e=>e.stopPropagation(),{passive:true});
+  settingsPop.addEventListener('click',e=>e.stopPropagation(),{passive:true});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!settingsOverlay.classList.contains('hidden'))closeSettings()});
   setMute.addEventListener('change',()=>{S.settings.muted=setMute.checked},{passive:true});
   setFX.addEventListener('change',()=>{S.settings.reduceFx=setFX.checked},{passive:true});
   setCap.addEventListener('change',()=>{S.settings.capOffline=setCap.checked},{passive:true});
 
-  // Save/Load
+  /* ========================= Save/Load ========================= */
   function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch{} }
   function load(){
     try{
@@ -468,10 +570,14 @@
       S.settings=Object.assign({muted:false,reduceFx:false,capOffline:true},s.settings||{});
 
       const counts=Object.fromEntries((s.buildings||[]).map(b=>[b.id,b.count||0]));
-      S.buildings=CATALOG.map(def=>{const saved=(s.buildings||[]).find(x=>x.id===def.id);return {...def,count:counts[def.id]||0,unlocked:!!(saved&&saved.unlocked)}});
+      S.buildings=CATALOG.map(def=>{
+        const saved=(s.buildings||[]).find(x=>x.id===def.id);
+        return {...def,count:counts[def.id]||0,unlocked:!!(saved&&saved.unlocked)};
+      });
 
       S.achievementsOwned=s.achievementsOwned||{};
       S.repLvls=Object.assign(Object.fromEntries(Object.keys(REP_UPG).map(k=>[k,0])), s.repLvls||{});
+      // re-apply upgrade effects to current state
       Object.keys(S.repLvls).forEach(k=>applyRepEffect(k, S.repLvls[k]));
 
       S.meta=Object.assign({lastActive:Date.now(),offlineEarned:0,cores:0,runs:0,bestRunTotal:0,lifetimeTotal:0,goldenHits:0}, s.meta||{});
@@ -483,7 +589,7 @@
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveOnExit(); });
   if(saveBtn)  saveBtn.addEventListener('click',()=>{ save(); Toast.push('Game saved'); },{passive:true});
 
-  // Offline gain
+  /* ========================= Offline Gain ========================= */
   function applyOfflineGain(){
     const now=Date.now(), then=S.meta.lastActive||now;
     let secs=Math.max(0,(now-then)/1000);
@@ -492,14 +598,15 @@
     if(earn>0){ S.bytes+=earn; S.total+=earn; S.meta.offlineEarned+=earn; Toast.push(`+${fmt(earn)} Bytes while you were away`) }
   }
 
-  // PWA install
+  /* ========================= PWA Install ========================= */
   let deferredPrompt=null;
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;if(installBtn)installBtn.style.display='';});
   if(installBtn){installBtn.addEventListener('click',async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.style.display='none';},{passive:true});}
 
-  // Boot
+  /* ========================= Boot ========================= */
   load();
   applyOfflineGain();
+  // ensure only Compile visible at start
   Object.entries(views).forEach(([k,el])=>{const act=k==='compile';el.classList.toggle('active',act);el.setAttribute('aria-hidden',act?'false':'true')});
   stickyBar.classList.add('hidden');
   drawAll();
